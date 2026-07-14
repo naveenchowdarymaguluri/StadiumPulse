@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-brand-dark text-brand-text;
+  }
+}
+
+/* Custom focus styles for keyboard accessibility */
+.focusable {
+  outline: none;
+}
+.focusable:focus-visible {
+  outline: 3px solid #10B981;
+  outline-offset: 2px;
+}
