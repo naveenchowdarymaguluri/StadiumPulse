@@ -2,7 +2,7 @@ import time
 import uuid
 import asyncio
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import FastAPI, Depends, HTTPException, status, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -151,7 +151,7 @@ def health_check():
     """
     return {
         "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "") + "Z",
         "database_mode": "fallback_in_memory" if db_service.use_fallback else "firestore_cloud",
         "genai_mode": "fallback_rules" if not gemini_service.client_active else "gemini_api"
     }
@@ -203,7 +203,7 @@ async def post_telemetry(payload: TelemetryInput):
 
         # Step-free route configuration
         step_free_routes = ZONE_DEFAULTS[payload.zone_id]['step_free_routes']
-        timestamp = datetime.utcnow().isoformat() + "Z"
+        timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "") + "Z"
 
         # Document updates to insert into Firestore / Mock fallback
         zone_update = {
@@ -265,8 +265,8 @@ async def trigger_reasoning(request: Optional[ReasoningRequest] = None):
             incidents_data = await db_service.get_all_incidents_async()
             weather = "Ambient 95°F, Sunny, 65% Humidity. High heat load across open structures."
         else:
-            zones_data = [z.dict() for z in request.zones]
-            incidents_data = [i.dict() for i in request.incidents]
+            zones_data = [z.model_dump() for z in request.zones]
+            incidents_data = [i.model_dump() for i in request.incidents]
             weather = request.weather_summary
 
         # Call cognitive intelligence service (Gemini SDK with rules fallback)
@@ -287,7 +287,7 @@ async def post_incident(incident: IncidentReport):
     Submits a mock incident report to ground GenAI diagnostics (e.g. simulated heart attacks).
     """
     try:
-        await db_service.add_incident_async(incident.dict())
+        await db_service.add_incident_async(incident.model_dump())
         logger.info("New incident logged", incident_id=incident.incident_id, priority=incident.priority)
         return {"status": "success", "incident_id": incident.incident_id}
     except Exception as e:
