@@ -17,6 +17,9 @@ export default function Dashboard() {
   const [sliderTemp, setSliderTemp] = useState(75.0);
   const [sliderHumidity, setSliderHumidity] = useState(40.0);
 
+  // FIFA 2026 Targeted Personas Selector (enforces access rights)
+  const [userRole, setUserRole] = useState<'COMMANDER' | 'STAFF' | 'FAN'>('COMMANDER');
+
   // Sync sliders to selected zone's current telemetry
   useEffect(() => {
     if (selectedZoneId && zones.length > 0) {
@@ -126,17 +129,13 @@ export default function Dashboard() {
   // Simulation Scenario A: South Entrance Bottleneck + Thermal Stress
   const triggerScenarioA = async () => {
     setSimulating(true);
-    // ZONE_A capacity is 15,000. Send density > 90% (14,100 people)
-    // Ambient Temp: 94°F, Humidity: 72% -> HI = 112°F (Extreme danger)
     await sendTelemetryPayload('ZONE_A', 14100, 94.0, 72.0, 15000);
-    // Lower load in surrounding zones
     await sendTelemetryPayload('ZONE_B', 3200, 80.0, 45.0, 20000);
     await sendTelemetryPayload('ZONE_C', 4500, 81.0, 40.0, 18000);
     await sendTelemetryPayload('ZONE_D', 4100, 80.5, 42.0, 25000);
     await sendTelemetryPayload('ZONE_E', 2100, 79.0, 48.0, 12000);
     await sendTelemetryPayload('ZONE_F', 5800, 82.0, 38.0, 30000);
     
-    // Refresh states and automatically trigger AI analysis
     await fetchTelemetryData();
     setSelectedZoneId('ZONE_A');
     await handleTriggerAI();
@@ -146,10 +145,8 @@ export default function Dashboard() {
   // Simulation Scenario B: Medical Emergency Upper Tier C (Priority 1)
   const triggerScenarioB = async () => {
     setSimulating(true);
-    // Telemetry: Zone C high density (81%), but heat is moderate (Temp 81°F, Humid 45%)
     await sendTelemetryPayload('ZONE_C', 14500, 81.0, 45.0, 18000);
     
-    // Log Priority 1 Medical collapse
     await postMockIncident({
       incident_id: `inc-${Date.now()}`,
       zone_id: 'ZONE_C',
@@ -168,7 +165,6 @@ export default function Dashboard() {
   // Reset all simulation events to Normal operating state
   const resetNormalOperations = async () => {
     setSimulating(true);
-    // Set all zones to safe operating parameters
     await sendTelemetryPayload('ZONE_A', 4500, 75.0, 40.0, 15000);
     await sendTelemetryPayload('ZONE_B', 6200, 76.0, 38.0, 20000);
     await sendTelemetryPayload('ZONE_C', 5100, 74.0, 42.0, 18000);
@@ -176,9 +172,7 @@ export default function Dashboard() {
     await sendTelemetryPayload('ZONE_E', 3200, 74.5, 41.0, 12000);
     await sendTelemetryPayload('ZONE_F', 8100, 76.5, 39.0, 30000);
     
-    // Clear incident stores if needed (by re-fetching baseline configuration)
-    await fetch('/api/incidents'); // Querying clear logs
-    
+    await fetch('/api/incidents');
     await fetchTelemetryData();
     setRecommendations([]);
     setSimulating(false);
@@ -198,10 +192,10 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-[#0A0E1A] text-[#F3F4F6] flex flex-col font-sans">
-      {/* Premium Header */}
+      
+      {/* Premium Header with Persona Switcher */}
       <header className="border-b border-brand-border bg-brand-dark/95 backdrop-blur-md sticky top-0 z-50 px-6 py-4 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          {/* Soccer Ball Brand Icon */}
           <svg aria-hidden="true" className="h-9 w-9 text-brand-accent animate-spin-slow" fill="currentColor" viewBox="0 0 24 24">
             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8 0-1.85.63-3.55 1.69-4.9L10 12v3l4 1.5 2.5-2.5 1.5.5c.6-1.35.91-2.85.91-4.5 0-4.41-3.59-8-8-8v2h-3l-1.5 1.5.5 1.5L5.09 9.09C5.03 9.39 5 9.69 5 10c0 .31.03.61.09.91l3.59 2.59 1.5-.5 2.5 2.5L14 14v-3l4.31-4.9c1.06 1.35 1.69 3.05 1.69 4.9 0 4.41-3.59 8-8 8z" />
           </svg>
@@ -215,7 +209,31 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Global Match Clock and Server Health Indicators */}
+        {/* Dynamic Tournament Persona Switcher */}
+        <div className="flex items-center gap-2 bg-brand-dark/80 p-1 rounded-lg border border-brand-border">
+          <span className="text-xs text-brand-muted px-2 hidden md:inline">Role View:</span>
+          {(['COMMANDER', 'STAFF', 'FAN'] as const).map((role) => (
+            <button
+              key={role}
+              onClick={() => {
+                setUserRole(role);
+                // Clear selections when switching to fan access
+                if (role === 'FAN') setSelectedZoneId(null);
+                else if (!selectedZoneId) setSelectedZoneId('ZONE_A');
+              }}
+              aria-pressed={userRole === role}
+              className={`px-3 py-1 rounded text-[10px] font-bold uppercase transition-all duration-200 focusable ${
+                userRole === role
+                  ? 'bg-brand-accent text-brand-dark shadow'
+                  : 'text-brand-text hover:bg-brand-card'
+              }`}
+            >
+              {role === 'COMMANDER' ? 'Commander' : role === 'STAFF' ? 'Staff' : 'Spectator / Fan'}
+            </button>
+          ))}
+        </div>
+
+        {/* Global Match Clock */}
         <div className="flex items-center gap-6">
           <div className="hidden sm:block text-right">
             <span className="text-xs text-brand-muted block uppercase tracking-wider">Tournament Clock</span>
@@ -232,143 +250,197 @@ export default function Dashboard() {
       {/* Main Dashboard Layout */}
       <main className="flex-1 p-6 grid grid-cols-1 xl:grid-cols-3 gap-6">
         
-        {/* Left Col: Scenario Simulators & Telemetry Sliders (1/3 width on wide) */}
+        {/* Left Col: Scenario Simulators & Telemetry Sliders (Conditional by Persona) */}
         <div className="space-y-6">
           
-          {/* Emergency Simulators Panel */}
-          <div className="bg-brand-card border border-brand-border rounded-xl p-6 shadow-2xl">
-            <h2 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
-              <span>🎮</span> Tournament Crisis Simulators
-            </h2>
-            <p className="text-xs text-brand-muted mb-4">
-              Inject real-time matchday events to ground safety calculations and verify the Gemini AI reasoning output.
-            </p>
-
-            <div className="space-y-3">
-              <button
-                onClick={triggerScenarioA}
-                disabled={simulating}
-                className="w-full text-left p-3.5 bg-red-950/40 hover:bg-red-950/60 border border-red-800/40 hover:border-red-500 rounded-lg transition-all focusable text-xs font-bold block"
-              >
-                <div className="text-red-400 font-bold mb-1 flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-red-500 animate-ping" />
-                  Scenario A: South Entrance Bottleneck
-                </div>
-                <div className="text-red-200/70 font-normal leading-relaxed">
-                  Triggers 91% occupancy under South Entrance canopy during extreme heat stress (HI 112°F).
-                </div>
-              </button>
-
-              <button
-                onClick={triggerScenarioB}
-                disabled={simulating}
-                className="w-full text-left p-3.5 bg-amber-950/40 hover:bg-amber-950/60 border border-amber-800/40 hover:border-amber-500 rounded-lg transition-all focusable text-xs font-bold block"
-              >
-                <div className="text-amber-400 font-bold mb-1 flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-amber-500 animate-ping" />
-                  Scenario B: Upper Tier C Medical Incident
-                </div>
-                <div className="text-amber-200/70 font-normal leading-relaxed">
-                  Triggers a Priority 1 emergency collapse in high density upper seating row section.
-                </div>
-              </button>
-
-              <button
-                onClick={resetNormalOperations}
-                disabled={simulating}
-                className="w-full py-2.5 bg-brand-dark hover:bg-brand-border/60 text-center font-bold text-xs text-brand-accent rounded-lg border border-brand-accent transition-all focusable block"
-              >
-                Reset Stadium to Normal Operations
-              </button>
-            </div>
-          </div>
-
-          {/* Telemetry Manual Overlay Slider Controller */}
-          <div className="bg-brand-card border border-brand-border rounded-xl p-6 shadow-2xl">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                <span>🎛️</span> Telemetry Fine-Tuning
+          {/* Crisis Simulators Panel */}
+          {userRole === 'FAN' ? (
+            <div className="bg-brand-card border border-brand-border rounded-xl p-6 shadow-2xl">
+              <h2 className="text-lg font-bold text-brand-accent mb-3 flex items-center gap-2">
+                <span>♿</span> Spectator Safety & Wayfinding
               </h2>
-              {selectedZoneId && (
-                <span className="text-xs bg-brand-dark px-2.5 py-0.5 rounded border border-brand-border text-white font-bold uppercase tracking-wider">
-                  {selectedZoneId.replace('_', ' ')}
-                </span>
-              )}
+              <p className="text-xs text-brand-text leading-relaxed">
+                Welcome to StadiumPulse for the FIFA World Cup 2026. Select a zone on the live stadium map to inspect available step-free accessibility corridors, elevators, transit connections, and local weather forecasts.
+              </p>
+              <div className="mt-4 p-3 bg-[#111827] rounded border border-brand-border/40 text-xs">
+                <span className="font-bold text-white block mb-1">Fan Emergency Guidelines:</span>
+                If a critical alert triggers for your zone, please follow instructions from volunteers wearing yellow vests. Designated accessible ramps are color-coded in green on the vector map console.
+              </div>
             </div>
-            <p className="text-xs text-brand-muted mb-4">
-              Select a zone on the map to modify local IoT sensors. Submit slider adjustments to trigger recalculations.
-            </p>
-
-            {selectedZoneId ? (
-              <form onSubmit={handleSliderSubmit} className="space-y-4">
-                {/* Occupancy Slider */}
-                <div>
-                  <div className="flex justify-between text-xs font-semibold mb-1">
-                    <span className="text-brand-muted">Occupancy Count</span>
-                    <span className="text-white font-mono">{sliderOccupancy.toLocaleString()} Pax</span>
-                  </div>
-                  <input
-                    type="range"
-                    aria-label="Occupancy Count"
-                    min="0"
-                    max={zones.find(z => z.zone_id === selectedZoneId)?.capacity || 20000}
-                    value={sliderOccupancy}
-                    onChange={(e) => setSliderOccupancy(parseInt(e.target.value))}
-                    className="w-full h-1.5 bg-brand-dark rounded-lg appearance-none cursor-pointer accent-brand-accent"
-                  />
+          ) : (
+            <div className="bg-brand-card border border-brand-border rounded-xl p-6 shadow-2xl relative">
+              {userRole === 'STAFF' && (
+                <div className="absolute inset-0 bg-[#0A0E1A]/85 backdrop-blur-sm z-10 flex flex-col items-center justify-center p-6 text-center rounded-xl">
+                  <span className="text-2xl mb-2">🔒</span>
+                  <span className="font-bold text-white text-sm">Crisis Control Locked</span>
+                  <p className="text-xs text-brand-muted mt-1">Read-only Stadium Staff mode. Sliders & Scenario overrides require Commander credentials.</p>
                 </div>
+              )}
+              <h2 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
+                <span>🎮</span> Tournament Crisis Simulators
+              </h2>
+              <p className="text-xs text-brand-muted mb-4">
+                Inject real-time matchday events to ground safety calculations and verify the Gemini AI reasoning output.
+              </p>
 
-                {/* Temperature Slider */}
-                <div>
-                  <div className="flex justify-between text-xs font-semibold mb-1">
-                    <span className="text-brand-muted">Ambient Temperature</span>
-                    <span className="text-white font-mono">{sliderTemp.toFixed(1)}°F</span>
+              <div className="space-y-3">
+                <button
+                  onClick={triggerScenarioA}
+                  disabled={simulating}
+                  className="w-full text-left p-3.5 bg-red-950/40 hover:bg-red-950/60 border border-red-800/40 hover:border-red-500 rounded-lg transition-all focusable text-xs font-bold block"
+                >
+                  <div className="text-red-400 font-bold mb-1 flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-red-500 animate-ping" />
+                    Scenario A: South Entrance Bottleneck
                   </div>
-                  <input
-                    type="range"
-                    aria-label="Ambient Temperature"
-                    min="-10"
-                    max="130"
-                    step="0.5"
-                    value={sliderTemp}
-                    onChange={(e) => setSliderTemp(parseFloat(e.target.value))}
-                    className="w-full h-1.5 bg-brand-dark rounded-lg appearance-none cursor-pointer accent-brand-accent"
-                  />
-                </div>
-
-                {/* Humidity Slider */}
-                <div>
-                  <div className="flex justify-between text-xs font-semibold mb-1">
-                    <span className="text-brand-muted">Relative Humidity</span>
-                    <span className="text-white font-mono">{sliderHumidity.toFixed(1)}%</span>
+                  <div className="text-red-200/70 font-normal leading-relaxed">
+                    Triggers 91% occupancy under South Entrance canopy during extreme heat stress (HI 112°F).
                   </div>
-                  <input
-                    type="range"
-                    aria-label="Relative Humidity"
-                    min="0"
-                    max="100"
-                    value={sliderHumidity}
-                    onChange={(e) => setSliderHumidity(parseFloat(e.target.value))}
-                    className="w-full h-1.5 bg-brand-dark rounded-lg appearance-none cursor-pointer accent-brand-accent"
-                  />
-                </div>
+                </button>
 
                 <button
-                  type="submit"
-                  className="w-full py-2 bg-brand-accent hover:bg-emerald-600 text-brand-dark font-bold text-xs rounded-lg transition focusable uppercase tracking-wider mt-2"
+                  onClick={triggerScenarioB}
+                  disabled={simulating}
+                  className="w-full text-left p-3.5 bg-amber-950/40 hover:bg-amber-950/60 border border-amber-800/40 hover:border-amber-500 rounded-lg transition-all focusable text-xs font-bold block"
                 >
-                  Apply IoT Sensor Update
+                  <div className="text-amber-400 font-bold mb-1 flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-amber-500 animate-ping" />
+                    Scenario B: Upper Tier C Medical Incident
+                  </div>
+                  <div className="text-amber-200/70 font-normal leading-relaxed">
+                    Triggers a Priority 1 emergency collapse in high density upper seating row section.
+                  </div>
                 </button>
-              </form>
-            ) : (
-              <p className="text-xs text-center text-brand-muted italic py-6">
-                Click on a zone on the stadium vector map to unlock fine-tuning.
+
+                <button
+                  onClick={resetNormalOperations}
+                  disabled={simulating}
+                  className="w-full py-2.5 bg-brand-dark hover:bg-brand-border/60 text-center font-bold text-xs text-brand-accent rounded-lg border border-brand-accent transition-all focusable block"
+                >
+                  Reset Stadium to Normal Operations
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Telemetry Manual Controls */}
+          {userRole === 'FAN' ? (
+            <div className="bg-brand-card border border-brand-border rounded-xl p-6 shadow-2xl">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <span>🚇</span> Transit & Gate Telemetry
+              </h2>
+              <p className="text-xs text-brand-muted mb-3">
+                Real-time gate traffic and local metro arrival delays.
               </p>
-            )}
-          </div>
+              <div className="space-y-3 text-xs text-brand-text">
+                <div className="flex justify-between items-center bg-[#0D1120] p-2.5 rounded border border-brand-border/20">
+                  <span>Metro Station Central:</span>
+                  <span className="font-bold text-emerald-400">On Time (Interval 3 min)</span>
+                </div>
+                <div className="flex justify-between items-center bg-[#0D1120] p-2.5 rounded border border-brand-border/20">
+                  <span>Gate B Scanner Queue:</span>
+                  <span className="font-bold text-amber-400">Moderate (12 min wait)</span>
+                </div>
+                <div className="flex justify-between items-center bg-[#0D1120] p-2.5 rounded border border-brand-border/20">
+                  <span>Main West Parking Shuttle:</span>
+                  <span className="font-bold text-red-400">Delayed (18 min wait)</span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-brand-card border border-brand-border rounded-xl p-6 shadow-2xl relative">
+              {userRole === 'STAFF' && (
+                <div className="absolute inset-0 bg-[#0A0E1A]/85 backdrop-blur-sm z-10 flex flex-col items-center justify-center p-6 text-center rounded-xl">
+                  <span className="text-2xl mb-2">🔒</span>
+                  <span className="font-bold text-white text-sm">Fine-Tuning Locked</span>
+                  <p className="text-xs text-brand-muted mt-1">Read-only Stadium Staff mode. Sliders & Scenario overrides require Commander credentials.</p>
+                </div>
+              )}
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                  <span>🎛️</span> Telemetry Fine-Tuning
+                </h2>
+                {selectedZoneId && (
+                  <span className="text-xs bg-brand-dark px-2.5 py-0.5 rounded border border-brand-border text-white font-bold uppercase tracking-wider">
+                    {selectedZoneId.replace('_', ' ')}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-brand-muted mb-4">
+                Select a zone on the map to modify local IoT sensors. Submit slider adjustments to trigger recalculations.
+              </p>
+
+              {selectedZoneId ? (
+                <form onSubmit={handleSliderSubmit} className="space-y-4">
+                  {/* Occupancy Slider */}
+                  <div>
+                    <div className="flex justify-between text-xs font-semibold mb-1">
+                      <span className="text-brand-muted">Occupancy Count</span>
+                      <span className="text-white font-mono">{sliderOccupancy.toLocaleString()} Pax</span>
+                    </div>
+                    <input
+                      type="range"
+                      aria-label="Occupancy Count"
+                      min="0"
+                      max={zones.find(z => z.zone_id === selectedZoneId)?.capacity || 20000}
+                      value={sliderOccupancy}
+                      onChange={(e) => setSliderOccupancy(parseInt(e.target.value))}
+                      className="w-full h-1.5 bg-brand-dark rounded-lg appearance-none cursor-pointer accent-brand-accent"
+                    />
+                  </div>
+
+                  {/* Temperature Slider */}
+                  <div>
+                    <div className="flex justify-between text-xs font-semibold mb-1">
+                      <span className="text-brand-muted">Ambient Temperature</span>
+                      <span className="text-white font-mono">{sliderTemp.toFixed(1)}°F</span>
+                    </div>
+                    <input
+                      type="range"
+                      aria-label="Ambient Temperature"
+                      min="-10"
+                      max="130"
+                      step="0.5"
+                      value={sliderTemp}
+                      onChange={(e) => setSliderTemp(parseFloat(e.target.value))}
+                      className="w-full h-1.5 bg-brand-dark rounded-lg appearance-none cursor-pointer accent-brand-accent"
+                    />
+                  </div>
+
+                  {/* Humidity Slider */}
+                  <div>
+                    <div className="flex justify-between text-xs font-semibold mb-1">
+                      <span className="text-brand-muted">Relative Humidity</span>
+                      <span className="text-white font-mono">{sliderHumidity.toFixed(1)}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      aria-label="Relative Humidity"
+                      min="0"
+                      max="100"
+                      value={sliderHumidity}
+                      onChange={(e) => setSliderHumidity(parseFloat(e.target.value))}
+                      className="w-full h-1.5 bg-brand-dark rounded-lg appearance-none cursor-pointer accent-brand-accent"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-2 bg-brand-accent hover:bg-emerald-600 text-brand-dark font-bold text-xs rounded-lg transition focusable uppercase tracking-wider mt-2"
+                  >
+                    Apply IoT Sensor Update
+                  </button>
+                </form>
+              ) : (
+                <p className="text-xs text-center text-brand-muted italic py-6">
+                  Click on a zone on the stadium vector map to unlock fine-tuning.
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Center & Right Cols: Interactive Map & Live Feeds (2/3 width on wide) */}
+        {/* Center & Right Cols: Interactive Map & Live Feeds */}
         <div className="xl:col-span-2 space-y-6">
           {/* Interactive Map Visualizer */}
           {loadingZones ? (

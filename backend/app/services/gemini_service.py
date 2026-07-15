@@ -59,6 +59,10 @@ class GeminiService:
         Analyze inputs causally: e.g., high heat index values (>105°F) cause crowd clustering under shaded concourses (e.g., Zone A/B entrances), creating physical bottleneck risks.
         For zones exceeding risk index thresholds (Risk >= 0.85), prioritize crowd diversion recommendations, step-free evacuation routing, and hydration distribution.
         
+        Analyze tournament-specific operational delays causally:
+        - If active incidents reports contain "transit delay", "metro suspension", or "shuttle delay", prioritize alternative transportation routing recommendations and coordinate with local bus links.
+        - If gate bottlenecks or security scanner failures are logged (e.g. "Gate scanner offline"), direct crowd routing away from affected gate areas to adjacent operating entrances.
+        
         You must return a raw JSON array of objects representing "Recommendation Cards". DO NOT wrap in markdown formatting (like ```json), write ONLY the raw JSON text.
         Each Recommendation Card must adhere strictly to this schema:
         {{
@@ -138,8 +142,9 @@ class GeminiService:
         logger.info("Generating synthetic recommendation cards.")
         cards = []
         
-        # Check active incidents
+        # Check active incidents and transit bottlenecks
         p1_incidents = [inc for inc in incidents if inc.get('priority') == 'P1' and inc.get('status') != 'RESOLVED']
+        transit_incidents = [inc for inc in incidents if any(k in inc.get('title', '').lower() or k in inc.get('description', '').lower() for k in ['transit', 'metro', 'shuttle', 'gate', 'scanner', 'delay']) and inc.get('status') != 'RESOLVED']
         
         for zone in zones:
             zone_id = zone['zone_id']
@@ -192,21 +197,34 @@ class GeminiService:
                     }
                 })
                 
-            # Warning Zone: Risk >= 0.4
-            elif risk >= 0.4:
+            # Warning Zone: Risk >= 0.4 or affected by transit delay
+            elif risk >= 0.4 or any(inc.get('zone_id') == zone_id for inc in transit_incidents):
+                zone_transit = [inc for inc in transit_incidents if inc.get('zone_id') == zone_id]
+                warning_actions = [
+                    "Deploy auxiliary team to monitor exit queue lengths.",
+                    "Update digital wayfinding displays to highlight alternative exit directions."
+                ]
+                
+                # Dynamic action items injection for transit bottlenecks
+                if zone_transit:
+                    for inc in zone_transit:
+                        title_lower = inc.get('title', '').lower()
+                        desc_lower = inc.get('description', '').lower()
+                        if 'gate' in title_lower or 'scanner' in title_lower or 'gate' in desc_lower:
+                            warning_actions.append("Reroute inbound spectators to adjacent operating gates due to security bottleneck.")
+                        else:
+                            warning_actions.append("Broadcast alternative transit advisories (Metro/Rideshare links) due to transit terminal delays.")
+
                 cards.append({
                     "zone_id": zone_id,
                     "severity": "WARNING",
                     "confidence": 0.85,
-                    "causal_analysis": f"Elevated occupant levels (Density {density:.1f}%) combined with heat factors. Early bottleneck tendencies detected in transition gateways.",
-                    "action_items": [
-                        "Deploy auxiliary team to monitor exit queue lengths.",
-                        "Update digital wayfinding displays to highlight alternative exit directions."
-                    ],
+                    "causal_analysis": f"Elevated occupant levels or active transit bottleneck ({', '.join(t.get('title') for t in zone_transit) if zone_transit else 'thermal risk'}) in {zone_id}. Early bottleneck tendencies detected in transition gateways.",
+                    "action_items": warning_actions,
                     "multilingual_alerts": {
-                        "en": f"WARNING: Increased crowd density in {zone_id}. Please follow directional signs.",
-                        "es": f"ADVERTENCIA: Mayor densidad de personas en {zone_id}. Siga las señales de dirección.",
-                        "fr": f"AVERTISSEMENT: Densité de foule accrue dans la {zone_id}. Veuillez suivre la signalisation."
+                        "en": f"WARNING: Crowd density or transit gate bottleneck in {zone_id}. Follow directional signs.",
+                        "es": f"ADVERTENCIA: Densidad de multitud o cuello de botella en {zone_id}. Siga las señales.",
+                        "fr": f"AVERTISSEMENT: Densité de foule ou goulot d'étranglement de transport dans la {zone_id}."
                     }
                 })
                 
