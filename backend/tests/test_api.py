@@ -119,3 +119,30 @@ class TestStadiumPulseAPI(unittest.TestCase):
             self.assertIn("causal_analysis", card)
             self.assertIn("action_items", card)
             self.assertIn("multilingual_alerts", card)
+
+    def test_rate_limiter_triggers(self):
+        # Limiter capacity is 30. We make 35 requests with custom IP "9.9.9.9".
+        # The 31st+ requests should receive a 429 status code.
+        responses = []
+        for _ in range(35):
+            responses.append(self.client.get("/api/zones", headers={"X-Forwarded-For": "9.9.9.9"}))
+        
+        status_codes = [r.status_code for r in responses]
+        self.assertIn(429, status_codes)
+
+    def test_rate_limiter_with_x_forwarded_for_isolation(self):
+        # Make 32 requests with IP "1.1.1.1" -> Should trigger 429 eventually
+        responses_ip1 = []
+        for _ in range(32):
+            responses_ip1.append(self.client.get("/api/zones", headers={"X-Forwarded-For": "1.1.1.1"}))
+        status_codes_ip1 = [r.status_code for r in responses_ip1]
+        self.assertIn(429, status_codes_ip1)
+        
+        # Immediately request with IP "2.2.2.2" -> Should get 200 OK since it is a different bucket!
+        response_ip2 = self.client.get("/api/zones", headers={"X-Forwarded-For": "2.2.2.2"})
+        self.assertEqual(response_ip2.status_code, 200)
+
+    def test_cors_headers_present(self):
+        # Fetching any endpoint with an Origin header should include CORS headers in response
+        response = self.client.get("/api/zones", headers={"Origin": "http://localhost:5173"})
+        self.assertIn("access-control-allow-origin", response.headers)

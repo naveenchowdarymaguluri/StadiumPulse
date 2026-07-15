@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from fastapi import FastAPI, Depends, HTTPException, status, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
+import os
 from typing import List, Dict, Any, Optional
 
 from backend.app.logging_config import configure_logging
@@ -25,10 +26,13 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS configuration
+# CORS configuration (securely configured in production via ALLOWED_ORIGINS)
+allowed_origins_env = os.environ.get("ALLOWED_ORIGINS", "*")
+allowed_origins = [origin.strip() for origin in allowed_origins_env.split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # For local/testing environments
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -48,7 +52,12 @@ class TokenBucketRateLimiter(BaseHTTPMiddleware):
         if request.url.path in ["/health", "/docs", "/openapi.json"]:
             return await call_next(request)
 
-        client_ip = request.client.host if request.client else "127.0.0.1"
+        # Handle X-Forwarded-For headers to get actual client IP behind reverse proxies
+        x_forwarded_for = request.headers.get("x-forwarded-for")
+        if x_forwarded_for:
+            client_ip = x_forwarded_for.split(",")[0].strip()
+        else:
+            client_ip = request.client.host if request.client else "127.0.0.1"
         now = time.time()
 
         with self.lock:
@@ -295,7 +304,6 @@ async def post_incident(incident: IncidentReport):
         raise HTTPException(status_code=500, detail="Failed to store incident report")
 
 from fastapi.staticfiles import StaticFiles
-import os
 
 @app.get("/api/incidents")
 async def get_incidents():
