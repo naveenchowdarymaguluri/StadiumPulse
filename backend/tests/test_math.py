@@ -12,6 +12,24 @@ class TestStadiumPulseMath(unittest.TestCase):
         self.assertGreater(hi, 115.0)
         self.assertLess(hi, 125.0)
 
+    def test_heat_index_below_humidity_threshold(self):
+        # Humidity < 40% should return temperature directly
+        self.assertEqual(calculate_heat_index(90.0, 30.0), 90.0)
+
+    def test_heat_index_low_humidity_adjustment(self):
+        # T=95.0, RH=10.0 (RH < 13% and 80 <= T <= 112)
+        # Should apply subtraction adjustment. Without adjustment H ~ 95.8, with adjustment ~ 95.1
+        hi = calculate_heat_index(95.0, 10.0)
+        self.assertLess(hi, 96.0)
+        self.assertGreater(hi, 94.0)
+
+    def test_heat_index_high_humidity_adjustment(self):
+        # T=84.0, RH=90.0 (RH > 85% and 80 <= T <= 87)
+        # Should apply addition adjustment.
+        hi = calculate_heat_index(84.0, 90.0)
+        self.assertGreater(hi, 95.0)
+        self.assertLess(hi, 105.0)
+
     def test_risk_index_normal(self):
         # Low density, normal heat index -> Safe R
         # D = 30%, H = 75F -> HI_factor = 0. D_factor = 0.3. R = 0.6 * 0.3 + 0.4 * 0 = 0.18

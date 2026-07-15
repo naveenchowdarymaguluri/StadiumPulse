@@ -202,7 +202,7 @@ export default function Dashboard() {
       <header className="border-b border-brand-border bg-brand-dark/95 backdrop-blur-md sticky top-0 z-50 px-6 py-4 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           {/* Soccer Ball Brand Icon */}
-          <svg className="h-9 w-9 text-brand-accent animate-spin-slow" fill="currentColor" viewBox="0 0 24 24">
+          <svg aria-hidden="true" className="h-9 w-9 text-brand-accent animate-spin-slow" fill="currentColor" viewBox="0 0 24 24">
             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8 0-1.85.63-3.55 1.69-4.9L10 12v3l4 1.5 2.5-2.5 1.5.5c.6-1.35.91-2.85.91-4.5 0-4.41-3.59-8-8-8v2h-3l-1.5 1.5.5 1.5L5.09 9.09C5.03 9.39 5 9.69 5 10c0 .31.03.61.09.91l3.59 2.59 1.5-.5 2.5 2.5L14 14v-3l4.31-4.9c1.06 1.35 1.69 3.05 1.69 4.9 0 4.41-3.59 8-8 8z" />
           </svg>
           <div>
@@ -309,6 +309,7 @@ export default function Dashboard() {
                   </div>
                   <input
                     type="range"
+                    aria-label="Occupancy Count"
                     min="0"
                     max={zones.find(z => z.zone_id === selectedZoneId)?.capacity || 20000}
                     value={sliderOccupancy}
@@ -325,6 +326,7 @@ export default function Dashboard() {
                   </div>
                   <input
                     type="range"
+                    aria-label="Ambient Temperature"
                     min="-10"
                     max="130"
                     step="0.5"
@@ -342,6 +344,7 @@ export default function Dashboard() {
                   </div>
                   <input
                     type="range"
+                    aria-label="Relative Humidity"
                     min="0"
                     max="100"
                     value={sliderHumidity}

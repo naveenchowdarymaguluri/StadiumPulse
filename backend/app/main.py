@@ -1,13 +1,16 @@
 import time
 import uuid
 import threading
+import math
+import os
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
+from typing import List, Dict, Any, Optional
+
 from fastapi import FastAPI, HTTPException, status, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
-import os
-from typing import List, Dict, Any, Optional
+from fastapi.staticfiles import StaticFiles
 
 from backend.app.logging_config import configure_logging
 from backend.app.models.schemas import TelemetryInput, ZoneState, IncidentReport, ReasoningRequest, RecommendationCard
@@ -58,7 +61,7 @@ class TokenBucketRateLimiter(BaseHTTPMiddleware):
         self.buckets = {}             # ip -> (tokens, last_refill_time)
         self.lock = threading.Lock()
 
-    async def dispatch(self, request: Request, call_next):
+    async def dispatch(self, request: Request, call_next) -> Response:
         # Exclude documentation or health paths from rate limits
         if request.url.path in ["/health", "/docs", "/openapi.json"]:
             return await call_next(request)
@@ -101,16 +104,15 @@ class TokenBucketRateLimiter(BaseHTTPMiddleware):
 app.add_middleware(TokenBucketRateLimiter, rate_limit=15.0, capacity=30.0)
 
 
-
 # ----------------- DETERMINISTIC MATHEMATICAL PIPELINES -----------------
 
 def calculate_heat_index(T: float, R: float) -> float:
     """
     Computes the NOAA Multi-Parameter Heat Index (apparent temperature) in Fahrenheit.
-    Formula applies standard NOAA regression formulation.
+    Formula applies standard NOAA regression formulation including low/high relative humidity adjustments.
     """
     # For temperatures below 80F or humidity below 40%, NOAA recommends direct temperature
-    if T < 80.0:
+    if T < 80.0 or R < 40.0:
         return T
 
     # Multi-parameter empirical coefficients
@@ -135,6 +137,17 @@ def calculate_heat_index(T: float, R: float) -> float:
         + c8 * T * (R**2)
         + c9 * (T**2) * (R**2)
     )
+
+    # NOAA Adjustments:
+    # 1. Subtraction adjustment for low humidity (< 13%) and temperatures between 80F and 112F
+    if 80.0 <= T <= 112.0 and R < 13.0:
+        adjustment = ((13.0 - R) / 4.0) * math.sqrt((17.0 - abs(T - 95.0)) / 17.0)
+        H -= adjustment
+    # 2. Addition adjustment for high humidity (> 85%) and temperatures between 80F and 87F
+    elif 80.0 <= T <= 87.0 and R > 85.0:
+        adjustment = ((R - 85.0) / 10.0) * ((87.0 - T) / 5.0)
+        H += adjustment
+
     return round(H, 2)
 
 def calculate_risk_index(density_pct: float, heat_index: float) -> float:
@@ -163,7 +176,7 @@ def calculate_risk_index(density_pct: float, heat_index: float) -> float:
 # ----------------- API ENDPOINTS -----------------
 
 @app.get("/health")
-def health_check():
+def health_check() -> Dict[str, Any]:
     """
     Confirms backend service, mock fallbacks, and internal systems health.
     """
@@ -175,7 +188,7 @@ def health_check():
     }
 
 @app.get("/api/zones", response_model=List[ZoneState])
-async def get_zones():
+async def get_zones() -> List[Dict[str, Any]]:
     """
     Retrieves the current operational states of all 6 stadium zones.
     """
@@ -189,7 +202,7 @@ async def get_zones():
         raise HTTPException(status_code=500, detail="Database retrieval failed")
 
 @app.post("/api/telemetry")
-async def post_telemetry(payload: TelemetryInput):
+async def post_telemetry(payload: TelemetryInput) -> Dict[str, Any]:
     """
     Ingests IoT telemetry, executes calculations, writes to DB, and flags anomalies.
     """
@@ -260,7 +273,7 @@ async def post_telemetry(payload: TelemetryInput):
         raise HTTPException(status_code=500, detail=f"Failed to process telemetry payload: {str(e)}")
 
 @app.get("/api/alerts")
-async def get_alerts():
+async def get_alerts() -> List[Dict[str, Any]]:
     """
     Fetches the history logs of active system alerts and notifications.
     """
@@ -272,7 +285,7 @@ async def get_alerts():
         raise HTTPException(status_code=500, detail="Failed to retrieve alerts logs")
 
 @app.post("/api/reason", response_model=List[RecommendationCard])
-async def trigger_reasoning(request: Optional[ReasoningRequest] = None):
+async def trigger_reasoning(request: Optional[ReasoningRequest] = None) -> List[Dict[str, Any]]:
     """
     Aggregates telemetry + incident feeds and queries the GenAI layer for recommendations.
     """
@@ -300,7 +313,7 @@ async def trigger_reasoning(request: Optional[ReasoningRequest] = None):
         raise HTTPException(status_code=500, detail="GenAI intelligence processing failed")
 
 @app.post("/api/incidents")
-async def post_incident(incident: IncidentReport):
+async def post_incident(incident: IncidentReport) -> Dict[str, Any]:
     """
     Submits a mock incident report to ground GenAI diagnostics (e.g. simulated heart attacks).
     """
@@ -312,10 +325,8 @@ async def post_incident(incident: IncidentReport):
         logger.error("Failed to post incident.", error=str(e))
         raise HTTPException(status_code=500, detail="Failed to store incident report")
 
-from fastapi.staticfiles import StaticFiles
-
 @app.get("/api/incidents")
-async def get_incidents():
+async def get_incidents() -> List[Dict[str, Any]]:
     """
     Fetches the list of active incidents.
     """
@@ -332,4 +343,3 @@ if os.path.exists(static_path):
     logger.info("Mounted production static React assets directory", path=static_path)
 else:
     logger.warning("Production static directory not found, API only mode active", path=static_path)
-

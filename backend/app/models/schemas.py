@@ -1,5 +1,6 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Dict, Optional, Literal
+import html
 
 # Static list of valid zone IDs
 VALID_ZONE_IDS = ['ZONE_A', 'ZONE_B', 'ZONE_C', 'ZONE_D', 'ZONE_E', 'ZONE_F']
@@ -42,6 +43,12 @@ class IncidentReport(BaseModel):
     priority: Literal['P1', 'P2', 'P3', 'P4']
     status: Literal['OPEN', 'IN_PROGRESS', 'RESOLVED']
     timestamp: str
+
+    @field_validator('incident_id', 'zone_id', 'title', 'description', 'timestamp')
+    @classmethod
+    def sanitize_strings(cls, v: str) -> str:
+        # Prevent XSS injection vectors by strictly escaping raw strings
+        return html.escape(v.strip())
 
 class MultilingualAlert(BaseModel):
     en: str

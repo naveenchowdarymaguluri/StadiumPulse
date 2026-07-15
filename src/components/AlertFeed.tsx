@@ -87,6 +87,7 @@ export const AlertFeed: React.FC<AlertFeedProps> = ({
             <button
               key={lang}
               onClick={() => setActiveLang(lang)}
+              aria-pressed={activeLang === lang}
               className={`px-3 py-1 rounded text-xs font-bold uppercase transition-all duration-200 focusable ${
                 activeLang === lang
                   ? 'bg-brand-accent text-brand-dark shadow'
@@ -110,6 +111,7 @@ export const AlertFeed: React.FC<AlertFeedProps> = ({
                 setFilterSeverity(sev);
                 setAlertPage(1); // Reset page on filter change
               }}
+              aria-pressed={filterSeverity === sev}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all duration-200 focusable ${
                 filterSeverity === sev
                   ? 'bg-brand-text text-brand-dark border-brand-text'
@@ -151,7 +153,7 @@ export const AlertFeed: React.FC<AlertFeedProps> = ({
             <span className="text-[10px] text-brand-muted font-normal lowercase">Powered by gemini-2.5-flash</span>
           </h3>
 
-          <div className="space-y-4 overflow-y-auto flex-1 max-h-[480px] pr-1">
+          <div aria-live="polite" className="space-y-4 overflow-y-auto flex-1 max-h-[480px] pr-1">
             {filteredRecs.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center p-6 text-brand-muted">
                 <span className="text-2xl mb-2">💡</span>
@@ -203,7 +205,7 @@ export const AlertFeed: React.FC<AlertFeedProps> = ({
               Telemetry Alarm Log
             </h3>
             
-            <div className="space-y-3 overflow-y-auto max-h-[420px] pr-1">
+            <div aria-live="polite" className="space-y-3 overflow-y-auto max-h-[420px] pr-1">
               {paginatedAlerts.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-brand-muted">
                   <span className="text-2xl mb-2">✅</span>
