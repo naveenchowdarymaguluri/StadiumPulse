@@ -156,7 +156,7 @@ def health_check():
         "genai_mode": "fallback_rules" if not gemini_service.client_active else "gemini_api"
     }
 
-@app.get("/zones", response_model=List[ZoneState])
+@app.get("/api/zones", response_model=List[ZoneState])
 async def get_zones():
     """
     Retrieves the current operational states of all 6 stadium zones.
@@ -170,7 +170,7 @@ async def get_zones():
         logger.error("Failed to fetch zone configurations.", error=str(e))
         raise HTTPException(status_code=500, detail="Database retrieval failed")
 
-@app.post("/telemetry")
+@app.post("/api/telemetry")
 async def post_telemetry(payload: TelemetryInput):
     """
     Ingests IoT telemetry, executes calculations, writes to DB, and flags anomalies.
@@ -241,7 +241,7 @@ async def post_telemetry(payload: TelemetryInput):
         logger.error("Telemetry update failed.", trace_id=trace_id, error=str(e))
         raise HTTPException(status_code=500, detail=f"Failed to process telemetry payload: {str(e)}")
 
-@app.get("/alerts")
+@app.get("/api/alerts")
 async def get_alerts():
     """
     Fetches the history logs of active system alerts and notifications.
@@ -253,7 +253,7 @@ async def get_alerts():
         logger.error("Failed to query alerts store.", error=str(e))
         raise HTTPException(status_code=500, detail="Failed to retrieve alerts logs")
 
-@app.post("/reason", response_model=List[RecommendationCard])
+@app.post("/api/reason", response_model=List[RecommendationCard])
 async def trigger_reasoning(request: Optional[ReasoningRequest] = None):
     """
     Aggregates telemetry + incident feeds and queries the GenAI layer for recommendations.
@@ -281,7 +281,7 @@ async def trigger_reasoning(request: Optional[ReasoningRequest] = None):
         logger.error("Cognitive reasoning engine failed.", error=str(e))
         raise HTTPException(status_code=500, detail="GenAI intelligence processing failed")
 
-@app.post("/incidents")
+@app.post("/api/incidents")
 async def post_incident(incident: IncidentReport):
     """
     Submits a mock incident report to ground GenAI diagnostics (e.g. simulated heart attacks).
@@ -297,7 +297,7 @@ async def post_incident(incident: IncidentReport):
 from fastapi.staticfiles import StaticFiles
 import os
 
-@app.get("/incidents")
+@app.get("/api/incidents")
 async def get_incidents():
     """
     Fetches the list of active incidents.
