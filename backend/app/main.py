@@ -1,3 +1,6 @@
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning, module="google")
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 import time
 import uuid
 import threading
