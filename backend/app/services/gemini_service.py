@@ -31,12 +31,24 @@ class GeminiService:
                 logger.warning("Failed to configure Google Generative AI client. Activating rule-based fallback service.", error=str(e))
         else:
             logger.info("GEMINI_API_KEY not found in environment. Activating rule-based fallback service.")
+        
+        # In-memory caching variables to avoid redundant GenAI API queries
+        self.last_state_hash = None
+        self.cached_recommendations = None
 
     def generate_recommendations(self, zones: List[Dict[str, Any]], incidents: List[Dict[str, Any]], weather_summary: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Processes real-time stadium state telemetry and returns a list of recommendation cards.
         If the Gemini API is unreachable, it delegates to a high-fidelity deterministic fallback.
         """
+        # Create a stable string representation for caching to avoid redundant API/logical round-trips
+        state_str = json.dumps({"zones": zones, "incidents": incidents, "weather": weather_summary}, sort_keys=True)
+        state_hash = hash(state_str)
+        
+        if self.cached_recommendations and state_hash == self.last_state_hash:
+            logger.info("Returning cached GenAI recommendations (state unchanged).")
+            return self.cached_recommendations
+
         # Grounding context preparation
         system_instruction = f"""
         You are the StadiumPulse GenAI Tournament Intelligence Engine for the FIFA World Cup 2026.
@@ -104,6 +116,8 @@ class GeminiService:
                 
                 if isinstance(cards, list):
                     logger.info("Successfully generated recommendations from Gemini API.", card_count=len(cards))
+                    self.last_state_hash = state_hash
+                    self.cached_recommendations = cards
                     return cards
                 else:
                     logger.warning("Gemini did not return an array. Falling back to synthetic generator.")
@@ -111,7 +125,10 @@ class GeminiService:
                 logger.error("Gemini API generation failed. Activating deterministic fallback.", error=str(e))
                 
         # Return highly-accurate rule-based synthetic cards as fallback
-        return self._generate_synthetic_recommendations(zones, incidents, weather_summary)
+        fallback_cards = self._generate_synthetic_recommendations(zones, incidents, weather_summary)
+        self.last_state_hash = state_hash
+        self.cached_recommendations = fallback_cards
+        return fallback_cards
 
     def _generate_synthetic_recommendations(self, zones: List[Dict[str, Any]], incidents: List[Dict[str, Any]], weather_summary: Optional[str]) -> List[Dict[str, Any]]:
         """

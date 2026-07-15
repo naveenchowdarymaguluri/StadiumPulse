@@ -1,7 +1,6 @@
 import os
 import threading
-import asyncio
-from typing import List, Dict, Any, Generator, AsyncGenerator
+from typing import List, Dict, Any, AsyncGenerator
 from google.cloud import firestore
 import structlog
 
@@ -63,12 +62,9 @@ class FirestoreService:
         
         if cred_path or emulator_host:
             try:
-                # Instantiate Firestore client
-                self.db = firestore.Client()
-                logger.info("Firestore client initialized successfully.", database="production")
-                
-                # Check connection and pre-populate if needed
-                self._bootstrap_firestore_db()
+                # Instantiate Firestore AsyncClient for native asynchronous performance
+                self.db = firestore.AsyncClient()
+                logger.info("Firestore AsyncClient initialized successfully.", database="production")
             except Exception as e:
                 logger.warning("Failed to connect to Firestore. Activating local mock fallback.", error=str(e))
                 self.use_fallback = True
@@ -76,13 +72,16 @@ class FirestoreService:
             logger.info("No GCP credentials found. Activating in-memory thread-safe database fallback.", database="in_memory")
             self.use_fallback = True
 
-    def _bootstrap_firestore_db(self):
+    async def bootstrap_async(self):
         """Helper to create initial zone documents in Firestore if they don't exist"""
+        if self.use_fallback:
+            return
         try:
             for zone_id, defaults in ZONE_DEFAULTS.items():
                 doc_ref = self.db.collection('zones').document(zone_id)
-                if not doc_ref.get().exists:
-                    doc_ref.set({
+                doc_snap = await doc_ref.get()
+                if not doc_snap.exists:
+                    await doc_ref.set({
                         'zone_id': zone_id,
                         'occupancy': 0,
                         'capacity': defaults['capacity'],
@@ -97,11 +96,11 @@ class FirestoreService:
                     })
             logger.info("Firestore database successfully bootstrapped.")
         except Exception as e:
-            logger.error("Failed to bootstrap Firestore database.", error=str(e))
+            logger.error("Failed to bootstrap Firestore database asynchronously.", error=str(e))
             self.use_fallback = True
 
-    # 1. FETCH ZONE STATE (Sync and Async)
-    def get_zone_sync(self, zone_id: str) -> Dict[str, Any]:
+    # 1. FETCH ZONE STATE (Async Only)
+    async def get_zone_async(self, zone_id: str) -> Dict[str, Any]:
         if self.use_fallback:
             with self.fallback_lock:
                 zone = self.fallback_db['zones'].get(zone_id)
@@ -109,18 +108,13 @@ class FirestoreService:
                     raise KeyError(f"Zone {zone_id} not found.")
                 return dict(zone)
         else:
-            doc = self.db.collection('zones').document(zone_id).get()
+            doc = await self.db.collection('zones').document(zone_id).get()
             if not doc.exists:
                 raise KeyError(f"Zone {zone_id} not found in Firestore.")
             return doc.to_dict()
 
-    async def get_zone_async(self, zone_id: str) -> Dict[str, Any]:
-        # Run blocking Firestore/fallback get inside run_in_executor to ensure true concurrency
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self.get_zone_sync, zone_id)
-
-    # 2. UPDATE ZONE STATE (Sync and Async)
-    def update_zone_sync(self, zone_id: str, data: Dict[str, Any]) -> None:
+    # 2. UPDATE ZONE STATE (Async Only)
+    async def update_zone_async(self, zone_id: str, data: Dict[str, Any]) -> None:
         if self.use_fallback:
             with self.fallback_lock:
                 if zone_id not in self.fallback_db['zones']:
@@ -128,78 +122,60 @@ class FirestoreService:
                 self.fallback_db['zones'][zone_id].update(data)
                 logger.debug("Local store zone updated.", zone_id=zone_id, update_data=data)
         else:
-            self.db.collection('zones').document(zone_id).update(data)
+            await self.db.collection('zones').document(zone_id).update(data)
             logger.debug("Firestore zone updated.", zone_id=zone_id, update_data=data)
 
-    async def update_zone_async(self, zone_id: str, data: Dict[str, Any]) -> None:
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, self.update_zone_sync, zone_id, data)
-
-    # 3. FETCH ALL ZONES (Sync and Async)
-    def get_all_zones_sync(self) -> List[Dict[str, Any]]:
+    # 3. FETCH ALL ZONES (Async Only)
+    async def get_all_zones_async(self) -> List[Dict[str, Any]]:
         if self.use_fallback:
             with self.fallback_lock:
                 return [dict(zone) for zone in self.fallback_db['zones'].values()]
         else:
             docs = self.db.collection('zones').stream()
-            return [doc.to_dict() for doc in docs]
+            zones_data = []
+            async for doc in docs:
+                zones_data.append(doc.to_dict())
+            return zones_data
 
-    async def get_all_zones_async(self) -> List[Dict[str, Any]]:
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self.get_all_zones_sync)
-
-    # 4. STREAM ACTIVE ZONES (Sync and Async Generator)
-    def stream_zones_sync(self) -> Generator[List[Dict[str, Any]], None, None]:
-        # Mock streaming by returning the current snap and sleeping or yielding
-        yield self.get_all_zones_sync()
-
+    # 4. STREAM ACTIVE ZONES (Async Generator)
     async def stream_zones_async(self) -> AsyncGenerator[List[Dict[str, Any]], None]:
         yield await self.get_all_zones_async()
 
-    # 5. ALERTS HISTORY (Sync and Async)
-    def get_all_alerts_sync(self) -> List[Dict[str, Any]]:
+    # 5. ALERTS HISTORY (Async Only)
+    async def get_all_alerts_async(self) -> List[Dict[str, Any]]:
         if self.use_fallback:
             with self.fallback_lock:
                 return list(self.fallback_db['alerts'])
         else:
-            docs = self.db.collection('alerts').order_by('timestamp', direction=firestore.Query.DESCENDING).stream()
-            return [doc.to_dict() for doc in docs]
+            query = self.db.collection('alerts').order_by('timestamp', direction=firestore.Query.DESCENDING)
+            docs = query.stream()
+            alerts_data = []
+            async for doc in docs:
+                alerts_data.append(doc.to_dict())
+            return alerts_data
 
-    async def get_all_alerts_async(self) -> List[Dict[str, Any]]:
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self.get_all_alerts_sync)
-
-    def add_alert_sync(self, alert_data: Dict[str, Any]) -> None:
+    async def add_alert_async(self, alert_data: Dict[str, Any]) -> None:
         if self.use_fallback:
             with self.fallback_lock:
                 self.fallback_db['alerts'].insert(0, alert_data)
         else:
-            self.db.collection('alerts').add(alert_data)
+            await self.db.collection('alerts').add(alert_data)
 
-    async def add_alert_async(self, alert_data: Dict[str, Any]) -> None:
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, self.add_alert_sync, alert_data)
-
-    # 6. INCIDENTS HISTORY (Sync and Async)
-    def get_all_incidents_sync(self) -> List[Dict[str, Any]]:
+    # 6. INCIDENTS HISTORY (Async Only)
+    async def get_all_incidents_async(self) -> List[Dict[str, Any]]:
         if self.use_fallback:
             with self.fallback_lock:
                 return list(self.fallback_db['incidents'])
         else:
             docs = self.db.collection('incidents').stream()
-            return [doc.to_dict() for doc in docs]
+            incidents_data = []
+            async for doc in docs:
+                incidents_data.append(doc.to_dict())
+            return incidents_data
 
-    async def get_all_incidents_async(self) -> List[Dict[str, Any]]:
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self.get_all_incidents_sync)
-
-    def add_incident_sync(self, incident_data: Dict[str, Any]) -> None:
+    async def add_incident_async(self, incident_data: Dict[str, Any]) -> None:
         if self.use_fallback:
             with self.fallback_lock:
                 self.fallback_db['incidents'].insert(0, incident_data)
         else:
-            self.db.collection('incidents').add(incident_data)
-
-    async def add_incident_async(self, incident_data: Dict[str, Any]) -> None:
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, self.add_incident_sync, incident_data)
+            await self.db.collection('incidents').add(incident_data)

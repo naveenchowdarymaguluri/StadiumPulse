@@ -3,6 +3,7 @@ import uuid
 import asyncio
 import threading
 from datetime import datetime, timezone
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException, status, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -19,11 +20,22 @@ import structlog
 configure_logging()
 logger = structlog.get_logger()
 
+# Initialize Services
+db_service = FirestoreService()
+gemini_service = GeminiService()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Bootstrap the Firestore database asynchronously on startup
+    await db_service.bootstrap_async()
+    yield
+
 # Instantiate FastAPI application
 app = FastAPI(
     title="StadiumPulse API",
     description="Real-time GenAI-enabled stadium intelligence and operations system for the FIFA World Cup 2026",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # CORS configuration (securely configured in production via ALLOWED_ORIGINS)
@@ -89,9 +101,7 @@ class TokenBucketRateLimiter(BaseHTTPMiddleware):
 
 app.add_middleware(TokenBucketRateLimiter, rate_limit=15.0, capacity=30.0)
 
-# Initialize Services
-db_service = FirestoreService()
-gemini_service = GeminiService()
+
 
 # ----------------- DETERMINISTIC MATHEMATICAL PIPELINES -----------------
 
