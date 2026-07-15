@@ -1,0 +1,31 @@
+# Node modules & build outputs
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Python cache & virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+.env
+
+# OS files
+.DS_Store
+Thumbs.db
+*.log
+
+# Jupyter Notebook & checkpoint files
+.ipynb_checkpoints/
+Untitled.ipynb
+
+# IDE configs
+.vscode/
+.idea/
+.agents/
+.gemini/
